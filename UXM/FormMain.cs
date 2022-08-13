@@ -38,10 +38,10 @@ namespace UXM
             EnableControls(true);
 
             Location = settings.WindowLocation;
-            if (settings.WindowSize.Width >= MinimumSize.Width && settings.WindowSize.Height >= MinimumSize.Height)
-                Size = settings.WindowSize;
-            if (settings.WindowMaximized)
-                WindowState = FormWindowState.Maximized;
+            //if (settings.WindowSize.Width >= MinimumSize.Width && settings.WindowSize.Height >= MinimumSize.Height) //this is very unnecessary
+                //Size = settings.WindowSize;
+            //if (settings.WindowMaximized)
+                //WindowState = FormWindowState.Maximized;
 
             string installPath = Util.TryGetGameInstallLocation(settings.ExePath);
             if (!string.IsNullOrEmpty(installPath))
@@ -227,7 +227,7 @@ namespace UXM
         {
             EnableControls(false);
             cts = new CancellationTokenSource();
-            string error = await Task.Run(() => ArchiveUnpacker.Unpack(txtExePath.Text, progress, cts.Token));
+            string error = await Task.Run(() => ArchiveUnpacker.Unpack(txtExePath.Text, progress, cts.Token, cbxSkip.Checked ? FormFileView.SelectedFiles : null, textBoxDstPath.Text));
 
             if (cts.Token.IsCancellationRequested)
             {
@@ -290,11 +290,6 @@ namespace UXM
             }
         }
 
-        private void cbxSkip_CheckedChanged(object sender, EventArgs e)
-        {
-            ArchiveUnpacker.SetSkip(cbxSkip.Checked);
-        }
-
         private FormFileView formFileView { get; set; }
 
         private void btnView_Click(object sender, EventArgs e)
@@ -321,5 +316,29 @@ namespace UXM
             cbxSkip.Checked = enable;
         }
 
+        private void buttonBrowseDst_Click(object sender, EventArgs e)
+        {//ideally the vista-era folder browser should be used but it's annoying to use
+            var dlg = new SaveFileDialog();
+            if (!string.IsNullOrEmpty(textBoxDstPath.Text)) { dlg.InitialDirectory = textBoxDstPath.Text; }
+            dlg.FileName = "somefile.example";
+            if (dlg.ShowDialog() == DialogResult.OK)
+            {
+                var folder = Path.GetDirectoryName(dlg.FileName);
+                textBoxDstPath.Text = folder;
+            }
+        }
+
+        private void buttonExploreDst_Click(object sender, EventArgs e)
+        {
+            string dir = textBoxDstPath.Text;
+            if (Directory.Exists(dir))
+            {
+                Process.Start(dir);
+            }
+            else
+            {
+                SystemSounds.Hand.Play();
+            }
+        }
     }
 }

@@ -15,19 +15,14 @@ namespace UXM
     {
         private const int WRITE_LIMIT = 1024 * 1024 * 100;
 
-        public static bool Skip { get; private set; }
-
-        public static void SetSkip(bool skip)
-        {
-            Skip = skip;
-        }
-
-        public static string Unpack(string exePath, IProgress<(double value, string status)> progress, CancellationToken ct)
+        public static string Unpack(string exePath, IProgress<(double value, string status)> progress, CancellationToken ct, List<string> selectedFiles = null, string destPath = null)
         {
 
             progress.Report((0, "Preparing to unpack..."));
             string gameDir = Path.GetDirectoryName(exePath);
-
+            if (string.IsNullOrEmpty(destPath)) { destPath = gameDir; }
+            if (!Directory.Exists(destPath)) { Directory.CreateDirectory(destPath); }
+            
             Util.Game game;
             GameInfo gameInfo;
             try
@@ -37,14 +32,15 @@ namespace UXM
             }
             catch (Exception ex)
             {
-
                 return $"Error getting game info: {ex.Message} {ex.StackTrace}";
             }
             if ((game == Util.Game.EldenRing || game == Util.Game.Sekiro) && !File.Exists("oo2core_6_win64.dll"))
                 File.Copy($"{gameDir}/oo2core_6_win64.dll", $"{Environment.CurrentDirectory}/oo2core_6_win64.dll");
 
-            if (FormFileView.SelectedFiles.Any() && Skip)
-                gameInfo.Dictionary = new ArchiveDictionary(string.Join("\n", FormFileView.SelectedFiles), game);
+            if (selectedFiles != null && selectedFiles.Any())
+            {
+                gameInfo.Dictionary = new ArchiveDictionary(string.Join("\n", selectedFiles), game);
+            }
 
             Dictionary<string, string> keys = null;
             if (game == Util.Game.DarkSouls2 || game == Util.Game.Scholar)
@@ -80,7 +76,7 @@ namespace UXM
                 keys = ArchiveKeys.EldenRingKeys;
             }
 
-            string drive = Path.GetPathRoot(Path.GetFullPath(gameDir));
+            string drive = Path.GetPathRoot(Path.GetFullPath(destPath));
             DriveInfo driveInfo = new DriveInfo(drive);
 
             if (driveInfo.AvailableFreeSpace < gameInfo.RequiredGB * 1024 * 1024 * 1024)
@@ -108,8 +104,8 @@ namespace UXM
                     progress.Report(((1.0 + (double)i / gameInfo.BackupDirs.Count) / (gameInfo.Archives.Count + 2.0),
                         $"Backing up directory \"{backup}\" ({i + 1}/{gameInfo.BackupDirs.Count})..."));
 
-                    string backupSource = $@"{gameDir}\{backup}";
-                    string backupTarget = $@"{gameDir}\_backup\{backup}";
+                    string backupSource = $@"{destPath}\{backup}";
+                    string backupTarget = $@"{destPath}\_backup\{backup}";
 
                     if (Directory.Exists(backupSource) && !Directory.Exists(backupTarget))
                     {
@@ -135,25 +131,25 @@ namespace UXM
 
                 string archive = gameInfo.Archives[i];
 
-                string error = UnpackArchive(gameDir, archive, keys?[archive], i,
-                    gameInfo.Archives.Count, gameInfo.BHD5Game, gameInfo.Dictionary, progress, ct).Result;
+                string error = UnpackArchive(destPath, gameDir, archive, keys?[archive], i,
+                    gameInfo.Archives.Count, gameInfo.BHD5Game, gameInfo.Dictionary, progress, ct, skipUnknown: selectedFiles != null).Result;
                 if (error != null)
                     return error;
             }
 
             if (game == Util.Game.DarkSouls)
-                UnpackDarkSoulsPTDE(exePath, gameDir, progress);
+                UnpackDarkSoulsPTDE(exePath, destPath, progress, selectedFiles, destPath); //TODO: support dst path for ptde
 
             progress.Report((1, "Unpacking complete!"));
             return null;
         }
 
-        private static void UnpackDarkSoulsPTDE(string exePath, string gameDir, IProgress<(double value, string status)> progress)
-        {
+        private static void UnpackDarkSoulsPTDE(string exePath, string gameDir, IProgress<(double value, string status)> progress, List<string> selectedFiles, string destPath = null)
+        { //TODO: support dst path for ptde
             progress.Report((0, "Grabbing missing BHDs"));
             GetBHD(gameDir, progress);
 
-            if (!FormFileView.SelectedFiles.Any() || FormFileView.SelectedFiles.Contains(c4110Path))
+            if (!selectedFiles.Any() || selectedFiles.Contains(c4110Path))
             {
                 progress.Report((0, "Creating c4110 file"));
                 CreateC4110(gameDir);
@@ -166,9 +162,9 @@ namespace UXM
             ExtractBHD(gameDir, progress);
         }
 
-        private static async Task<string> UnpackArchive(string gameDir, string archive, string key, int index, int total,
+        private static async Task<string> UnpackArchive(string destPath, string gameDir, string archive, string key, int index, int total,
             BHD5.Game gameVersion, ArchiveDictionary archiveDictionary,
-            IProgress<(double value, string status)> progress, CancellationToken ct)
+            IProgress<(double value, string status)> progress, CancellationToken ct, bool skipUnknown)
         {
             progress.Report(((index + 2.0) / (total + 2.0), $"Loading {archive}..."));
             string bhdPath = $@"{gameDir}\{archive}.bhd";
@@ -239,18 +235,18 @@ namespace UXM
                                         path = $"/sound/{path}";
 
                                     unknown = false;
-                                    path = gameDir + path.Replace('/', '\\');
+                                    path = destPath + path.Replace('/', '\\');
                                     if (File.Exists(path))
                                         continue;
                                 }
                                 else
                                 {
-                                    if (Skip)
+                                    if (skipUnknown)
                                         continue;
 
                                     unknown = true;
                                     string filename = $"{archive.Split('\\')[0]}_{header.FileNameHash:D10}"; //sad :(
-                                    string directory = $@"{gameDir}\_unknown";
+                                    string directory = $@"{destPath}\_unknown"; //really should be using Path.Combine everywhere
                                     path = $@"{directory}\{filename}";
                                     if (File.Exists(path) || Directory.Exists(directory) && Directory.GetFiles(directory, $"{filename}.*").Length > 0)
                                         continue;

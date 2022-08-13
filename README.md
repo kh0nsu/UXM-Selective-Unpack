@@ -33,6 +33,10 @@ You cannot play online with an modified exe, so you cannot go online with an unp
 
 [Semver](https://github.com/maxhauser/semver) by Max Hauser  
 
+# Building
+
+SoulsFormats must be cloned next to the UXM folder. Must switch to ER branch for ER support.
+
 # Changelog  
 ### 2.1.3  
 * Added 21 new files from 1.06 patch 
